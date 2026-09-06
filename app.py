@@ -7,6 +7,7 @@ st.set_page_config(
     page_icon="🛡️",
     layout="wide"
 )
+initialize_database()
 
 # Application title
 st.title("🛡️ GRC Compliance Automation Platform")
