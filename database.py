@@ -51,7 +51,9 @@ def initialize_database():
 
     connection.commit()
     connection.close()
-    def add_finding(
+
+
+def add_finding(
     finding_id,
     title,
     description,
