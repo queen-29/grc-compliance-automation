@@ -51,3 +51,79 @@ def initialize_database():
 
     connection.commit()
     connection.close()
+    def add_finding(
+    finding_id,
+    title,
+    description,
+    category,
+    framework,
+    control,
+    likelihood,
+    impact,
+    risk_score,
+    severity,
+    owner,
+    due_date,
+    status,
+    created_at,
+    updated_at
+):
+    """Add a new finding to the database."""
+
+    connection = get_connection()
+
+    connection.execute("""
+        INSERT INTO findings (
+            finding_id,
+            title,
+            description,
+            category,
+            framework,
+            control,
+            likelihood,
+            impact,
+            risk_score,
+            severity,
+            owner,
+            due_date,
+            status,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        finding_id,
+        title,
+        description,
+        category,
+        framework,
+        control,
+        likelihood,
+        impact,
+        risk_score,
+        severity,
+        owner,
+        due_date,
+        status,
+        created_at,
+        updated_at
+    ))
+
+    connection.commit()
+    connection.close()
+
+
+def get_all_findings():
+    """Return all findings from the database."""
+
+    connection = get_connection()
+
+    findings = connection.execute("""
+        SELECT *
+        FROM findings
+        ORDER BY id DESC
+    """).fetchall()
+
+    connection.close()
+
+    return findings
