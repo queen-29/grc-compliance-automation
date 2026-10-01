@@ -1,11 +1,15 @@
-
+```python
 import streamlit as st
+import pandas as pd
 from datetime import date, datetime
 
 from database import (
     initialize_database,
     get_all_findings,
-    add_finding
+    add_finding,
+    add_remediation_action,
+    get_all_remediation_actions,
+    update_remediation_action
 )
 
 from risk_engine import (
@@ -28,7 +32,40 @@ st.set_page_config(
 
 initialize_database()
 
-findings = get_all_findings()
+
+# ---------------------------------------------------------
+# HELPER FUNCTIONS
+# ---------------------------------------------------------
+
+def get_next_finding_id(findings):
+
+    existing_numbers = []
+
+    for finding in findings:
+
+        finding_id = str(finding["finding_id"])
+
+        if finding_id.startswith("F-"):
+
+            try:
+                existing_numbers.append(
+                    int(finding_id.split("-")[1])
+                )
+
+            except (ValueError, IndexError):
+                pass
+
+    next_number = max(existing_numbers, default=0) + 1
+
+    return f"F-{next_number:04d}"
+
+
+def get_finding_lookup(findings):
+
+    return {
+        finding["finding_id"]: finding
+        for finding in findings
+    }
 
 
 # ---------------------------------------------------------
@@ -37,7 +74,9 @@ findings = get_all_findings()
 
 st.title("🛡️ GRC Compliance Automation Platform")
 
-st.caption("Governance • Risk • Compliance")
+st.caption(
+    "Governance • Risk • Compliance"
+)
 
 st.divider()
 
@@ -50,7 +89,8 @@ page = st.sidebar.radio(
     "Navigation",
     [
         "Dashboard",
-        "Risk Assessment"
+        "Risk Assessment",
+        "Remediation Tracker"
     ]
 )
 
@@ -62,6 +102,8 @@ page = st.sidebar.radio(
 if page == "Dashboard":
 
     st.header("GRC Dashboard")
+
+    findings = get_all_findings()
 
     total_findings = len(findings)
 
@@ -87,7 +129,10 @@ if page == "Dashboard":
         ).lower() not in ["closed", "resolved"]:
 
             try:
-                due = date.fromisoformat(str(due_date_value))
+
+                due = date.fromisoformat(
+                    str(due_date_value)
+                )
 
                 if due < date.today():
                     overdue_findings += 1
@@ -142,7 +187,7 @@ if page == "Dashboard":
 
         st.download_button(
             label="Download Risk Register (CSV)",
-            data=__import__("pandas").DataFrame(
+            data=pd.DataFrame(
                 display_data
             ).to_csv(index=False).encode("utf-8"),
             file_name="grc_risk_register.csv",
@@ -151,15 +196,58 @@ if page == "Dashboard":
 
     else:
 
-        st.info("No findings have been recorded yet.")
+        st.info(
+            "No findings have been recorded yet."
+        )
+
+    # REMEDIATION SUMMARY
+
+    st.divider()
+
+    st.subheader("Remediation Overview")
+
+    remediation_actions = get_all_remediation_actions()
+
+    total_actions = len(remediation_actions)
+
+    outstanding_actions = sum(
+        1 for action in remediation_actions
+        if action["status"] != "Closed"
+    )
+
+    closed_actions = sum(
+        1 for action in remediation_actions
+        if action["status"] == "Closed"
+    )
+
+    rem_col1, rem_col2, rem_col3 = st.columns(3)
+
+    rem_col1.metric(
+        "Total Remediation Actions",
+        total_actions
+    )
+
+    rem_col2.metric(
+        "Outstanding Actions",
+        outstanding_actions
+    )
+
+    rem_col3.metric(
+        "Closed Actions",
+        closed_actions
+    )
 
     st.divider()
 
     st.subheader("System Status")
 
-    st.success("Database initialized successfully")
+    st.success(
+        "Database initialized successfully"
+    )
 
-    st.write(f"{total_findings} finding(s) currently stored")
+    st.write(
+        f"{total_findings} finding(s) currently stored"
+    )
 
 
 # ---------------------------------------------------------
@@ -188,8 +276,10 @@ elif page == "Risk Assessment":
 
         description = st.text_area(
             "Describe the finding",
-            placeholder="Describe the issue, affected systems, "
-                        "and relevant circumstances...",
+            placeholder=(
+                "Describe the issue, affected systems, "
+                "and relevant circumstances..."
+            ),
             height=120
         )
 
@@ -219,8 +309,6 @@ elif page == "Risk Assessment":
         )
 
         st.divider()
-
-        # INHERENT RISK
 
         st.subheader("Inherent Risk")
 
@@ -255,8 +343,6 @@ elif page == "Risk Assessment":
             )
 
         st.divider()
-
-        # RESIDUAL RISK
 
         st.subheader("Residual Risk")
 
@@ -295,20 +381,25 @@ elif page == "Risk Assessment":
             use_container_width=True
         )
 
-    # -----------------------------------------------------
-    # PROCESS ASSESSMENT
-    # -----------------------------------------------------
-
     if submitted:
 
         if not title.strip():
-            st.error("Please enter a finding title.")
+
+            st.error(
+                "Please enter a finding title."
+            )
 
         elif not description.strip():
-            st.error("Please describe the finding.")
+
+            st.error(
+                "Please describe the finding."
+            )
 
         elif not owner.strip():
-            st.error("Please enter a risk owner.")
+
+            st.error(
+                "Please enter a risk owner."
+            )
 
         else:
 
@@ -324,9 +415,11 @@ elif page == "Risk Assessment":
                     residual_impact
                 )
 
-                next_number = len(findings) + 1
+                current_findings = get_all_findings()
 
-                finding_id = f"F-{next_number:04d}"
+                finding_id = get_next_finding_id(
+                    current_findings
+                )
 
                 timestamp = datetime.now().isoformat(
                     timespec="seconds"
@@ -362,9 +455,9 @@ elif page == "Risk Assessment":
                     f"Finding {finding_id} saved successfully."
                 )
 
-                # RISK RESULTS
-
-                st.subheader("Risk Assessment Results")
+                st.subheader(
+                    "Risk Assessment Results"
+                )
 
                 result_col1, result_col2 = st.columns(2)
 
@@ -396,10 +489,6 @@ elif page == "Risk Assessment":
 
                 st.divider()
 
-                # -------------------------------------------------
-                # AUTOMATED GRC RECOMMENDATIONS
-                # -------------------------------------------------
-
                 st.header("🤖 GRC Recommendations")
 
                 st.caption(
@@ -420,7 +509,9 @@ elif page == "Risk Assessment":
                     "approved compliance conclusions."
                 )
 
-                st.subheader("Finding Classification")
+                st.subheader(
+                    "Finding Classification"
+                )
 
                 st.write(
                     recommendations["finding_type"]
@@ -439,9 +530,9 @@ elif page == "Risk Assessment":
                         "General recommendations are displayed."
                     )
 
-                # ISO CONTROLS
-
-                st.subheader("ISO 27001:2022 Control Suggestions")
+                st.subheader(
+                    "ISO 27001:2022 Control Suggestions"
+                )
 
                 if recommendations["iso_controls"]:
 
@@ -451,7 +542,9 @@ elif page == "Risk Assessment":
                             f'{control["control"]} - {control["name"]}'
                         ):
 
-                            st.write(control["reason"])
+                            st.write(
+                                control["reason"]
+                            )
 
                 else:
 
@@ -459,9 +552,9 @@ elif page == "Risk Assessment":
                         "No specific ISO control suggestion available."
                     )
 
-                # NIST CONTROLS
-
-                st.subheader("NIST SP 800-53 Control Suggestions")
+                st.subheader(
+                    "NIST SP 800-53 Control Suggestions"
+                )
 
                 if recommendations["nist_controls"]:
 
@@ -478,35 +571,38 @@ elif page == "Risk Assessment":
                         "No specific NIST control suggestion available."
                     )
 
-                # REMEDIATION
-
-                st.subheader("Recommended Remediation Actions")
+                st.subheader(
+                    "Recommended Remediation Actions"
+                )
 
                 for action in recommendations["remediation"]:
 
-                    st.markdown(f"- {action}")
+                    st.markdown(
+                        f"- {action}"
+                    )
 
-                # EVIDENCE
-
-                st.subheader("Suggested Audit Evidence")
+                st.subheader(
+                    "Suggested Audit Evidence"
+                )
 
                 for evidence_item in recommendations["evidence"]:
 
-                    st.markdown(f"- {evidence_item}")
+                    st.markdown(
+                        f"- {evidence_item}"
+                    )
 
                 st.divider()
 
                 st.info(
-                    "Finding saved successfully. The recommendations "
-                    "are displayed for review; they are not stored as "
-                    "approved controls or verified evidence."
+                    "The finding has been saved. Recommendations "
+                    "are displayed for review; they are not stored "
+                    "as approved controls or verified evidence."
                 )
 
                 st.caption(
-                    "Before relying on a suggested mapping, verify "
-                    "the control reference and applicability against "
-                    "your licensed framework documentation and "
-                    "organizational scope."
+                    "Verify suggested control references and "
+                    "applicability against your framework "
+                    "documentation and organizational scope."
                 )
 
             except ValueError as error:
@@ -520,3 +616,332 @@ elif page == "Risk Assessment":
                 st.error(
                     f"An unexpected error occurred: {error}"
                 )
+
+
+# ---------------------------------------------------------
+# REMEDIATION TRACKER
+# ---------------------------------------------------------
+
+elif page == "Remediation Tracker":
+
+    st.header("Remediation Tracker")
+
+    st.write(
+        "Create, assign and monitor corrective actions "
+        "against recorded GRC findings."
+    )
+
+    st.divider()
+
+    findings = get_all_findings()
+
+    if not findings:
+
+        st.warning(
+            "No findings are available. Create a risk assessment first."
+        )
+
+    else:
+
+        finding_options = [
+            finding["finding_id"]
+            for finding in findings
+        ]
+
+        finding_lookup = get_finding_lookup(
+            findings
+        )
+
+        # CREATE REMEDIATION ACTION
+
+        st.subheader("Create Remediation Action")
+
+        with st.form("create_remediation_form"):
+
+            selected_finding_id = st.selectbox(
+                "Select Finding",
+                finding_options
+            )
+
+            selected_finding = finding_lookup[
+                selected_finding_id
+            ]
+
+            st.caption(
+                f'Finding: {selected_finding["title"]}'
+            )
+
+            action = st.text_area(
+                "Corrective Action",
+                placeholder=(
+                    "Describe the action required to resolve the finding."
+                )
+            )
+
+            action_owner = st.text_input(
+                "Assigned Owner",
+                value=selected_finding["owner"] or ""
+            )
+
+            action_due_date = st.date_input(
+                "Remediation Deadline",
+                value=date.today()
+            )
+
+            create_action = st.form_submit_button(
+                "Save Remediation Action",
+                use_container_width=True
+            )
+
+        if create_action:
+
+            if not action.strip():
+
+                st.error(
+                    "Please enter a corrective action."
+                )
+
+            elif not action_owner.strip():
+
+                st.error(
+                    "Please enter an action owner."
+                )
+
+            else:
+
+                try:
+
+                    add_remediation_action(
+                        finding_id=selected_finding_id,
+                        action=action.strip(),
+                        owner=action_owner.strip(),
+                        due_date=action_due_date.isoformat(),
+                        status="Open",
+                        completion_notes=""
+                    )
+
+                    st.success(
+                        "Remediation action saved successfully."
+                    )
+
+                except Exception as error:
+
+                    st.error(
+                        f"Unable to save remediation action: {error}"
+                    )
+
+        st.divider()
+
+        # UPDATE REMEDIATION ACTION
+
+        st.subheader("Update Remediation Progress")
+
+        actions = get_all_remediation_actions()
+
+        if actions:
+
+            action_options = [
+                item["id"]
+                for item in actions
+            ]
+
+            selected_action_id = st.selectbox(
+                "Select Remediation Action",
+                action_options,
+                format_func=lambda action_id: next(
+                    (
+                        f'Action #{item["id"]} - '
+                        f'{item["action"][:65]}'
+                        for item in actions
+                        if item["id"] == action_id
+                    ),
+                    str(action_id)
+                )
+            )
+
+            selected_action = next(
+                item for item in actions
+                if item["id"] == selected_action_id
+            )
+
+            try:
+
+                existing_due_date = date.fromisoformat(
+                    str(selected_action["due_date"])
+                )
+
+            except (ValueError, TypeError):
+
+                existing_due_date = date.today()
+
+            status_options = [
+                "Open",
+                "In Progress",
+                "Under Review",
+                "Closed"
+            ]
+
+            current_status = selected_action["status"]
+
+            status_index = (
+                status_options.index(current_status)
+                if current_status in status_options
+                else 0
+            )
+
+            with st.form("update_remediation_form"):
+
+                st.write(
+                    f'**Finding ID:** {selected_action["finding_id"]}'
+                )
+
+                st.write(
+                    f'**Action:** {selected_action["action"]}'
+                )
+
+                updated_status = st.selectbox(
+                    "Remediation Status",
+                    status_options,
+                    index=status_index
+                )
+
+                updated_owner = st.text_input(
+                    "Assigned Owner",
+                    value=selected_action["owner"] or ""
+                )
+
+                updated_due_date = st.date_input(
+                    "Remediation Deadline",
+                    value=existing_due_date
+                )
+
+                completion_notes = st.text_area(
+                    "Completion Notes / Progress Update",
+                    value=selected_action["completion_notes"] or "",
+                    placeholder=(
+                        "Describe work completed, outstanding issues "
+                        "or verification results."
+                    )
+                )
+
+                update_action = st.form_submit_button(
+                    "Update Remediation",
+                    use_container_width=True
+                )
+
+            if update_action:
+
+                if not updated_owner.strip():
+
+                    st.error(
+                        "Please enter an assigned owner."
+                    )
+
+                else:
+
+                    try:
+
+                        updated = update_remediation_action(
+                            action_id=selected_action_id,
+                            status=updated_status,
+                            owner=updated_owner.strip(),
+                            due_date=updated_due_date.isoformat(),
+                            completion_notes=completion_notes.strip()
+                        )
+
+                        if updated:
+
+                            st.success(
+                                "Remediation progress updated successfully."
+                            )
+
+                        else:
+
+                            st.error(
+                                "Unable to find the selected action."
+                            )
+
+                    except Exception as error:
+
+                        st.error(
+                            f"Unable to update remediation: {error}"
+                        )
+
+        else:
+
+            st.info(
+                "No remediation actions have been created yet."
+            )
+
+        st.divider()
+
+        # REMEDIATION REGISTER
+
+        st.subheader("Remediation Register")
+
+        actions = get_all_remediation_actions()
+
+        if actions:
+
+            outstanding_actions = sum(
+                1 for item in actions
+                if item["status"] != "Closed"
+            )
+
+            closed_actions = sum(
+                1 for item in actions
+                if item["status"] == "Closed"
+            )
+
+            metric1, metric2, metric3 = st.columns(3)
+
+            metric1.metric(
+                "Total Actions",
+                len(actions)
+            )
+
+            metric2.metric(
+                "Outstanding",
+                outstanding_actions
+            )
+
+            metric3.metric(
+                "Closed",
+                closed_actions
+            )
+
+            register_data = []
+
+            for item in actions:
+
+                register_data.append({
+                    "Action ID": item["id"],
+                    "Finding ID": item["finding_id"],
+                    "Action": item["action"],
+                    "Owner": item["owner"],
+                    "Due Date": item["due_date"],
+                    "Status": item["status"],
+                    "Updated": item["updated_at"]
+                })
+
+            st.dataframe(
+                register_data,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.download_button(
+                label="Download Remediation Register (CSV)",
+                data=pd.DataFrame(
+                    register_data
+                ).to_csv(index=False).encode("utf-8"),
+                file_name="grc_remediation_register.csv",
+                mime="text/csv"
+            )
+
+        else:
+
+            st.info(
+                "Save your first remediation action to populate this register."
+            )
+```
