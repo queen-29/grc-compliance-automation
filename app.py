@@ -67,6 +67,26 @@ def get_finding_lookup(findings):
     }
 
 
+def is_overdue(due_date_value, status):
+
+    if not due_date_value:
+        return False
+
+    if (status or "").lower() in ["closed", "resolved"]:
+        return False
+
+    try:
+
+        due = date.fromisoformat(
+            str(due_date_value)
+        )
+
+        return due < date.today()
+
+    except (ValueError, TypeError):
+        return False
+
+
 # ---------------------------------------------------------
 # APPLICATION HEADER
 # ---------------------------------------------------------
@@ -104,6 +124,8 @@ if page == "Dashboard":
 
     findings = get_all_findings()
 
+    remediation_actions = get_all_remediation_actions()
+
     total_findings = len(findings)
 
     open_findings = sum(
@@ -112,41 +134,80 @@ if page == "Dashboard":
         not in ["closed", "resolved"]
     )
 
-    critical_risks = sum(
+    overdue_findings = sum(
         1 for finding in findings
-        if (finding["severity"] or "").lower() == "critical"
+        if is_overdue(
+            finding["due_date"],
+            finding["status"]
+        )
     )
 
-    overdue_findings = 0
+    critical_inherent = sum(
+        1 for finding in findings
+        if (
+            finding["inherent_severity"] or ""
+        ).lower() == "critical"
+    )
 
-    for finding in findings:
+    critical_residual = sum(
+        1 for finding in findings
+        if (
+            finding["residual_severity"]
+            or finding["severity"]
+            or ""
+        ).lower() == "critical"
+    )
 
-        due_date_value = finding["due_date"]
+    high_residual = sum(
+        1 for finding in findings
+        if (
+            finding["residual_severity"]
+            or finding["severity"]
+            or ""
+        ).lower() == "high"
+    )
 
-        if due_date_value and (
-            finding["status"] or ""
-        ).lower() not in ["closed", "resolved"]:
+    # RISK OVERVIEW
 
-            try:
-
-                due = date.fromisoformat(
-                    str(due_date_value)
-                )
-
-                if due < date.today():
-                    overdue_findings += 1
-
-            except (ValueError, TypeError):
-                pass
+    st.subheader("Risk Overview")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Total Findings", total_findings)
-    col2.metric("Open Findings", open_findings)
-    col3.metric("Overdue", overdue_findings)
-    col4.metric("Critical Risks", critical_risks)
+    col1.metric(
+        "Total Findings",
+        total_findings
+    )
+
+    col2.metric(
+        "Open Findings",
+        open_findings
+    )
+
+    col3.metric(
+        "Overdue Findings",
+        overdue_findings
+    )
+
+    col4.metric(
+        "Critical Inherent Risks",
+        critical_inherent
+    )
+
+    col5, col6 = st.columns(2)
+
+    col5.metric(
+        "Critical Residual Risks",
+        critical_residual
+    )
+
+    col6.metric(
+        "High Residual Risks",
+        high_residual
+    )
 
     st.divider()
+
+    # RISK REGISTER
 
     st.subheader("Risk & Audit Register")
 
@@ -157,25 +218,35 @@ if page == "Dashboard":
         for finding in findings:
 
             display_data.append({
+
                 "Finding ID": finding["finding_id"],
+
                 "Title": finding["title"],
+
                 "Category": finding["category"],
+
                 "Inherent Risk": (
                     finding["inherent_severity"]
                     or "Not assessed"
                 ),
+
                 "Residual Risk": (
                     finding["residual_severity"]
                     or finding["severity"]
                 ),
+
                 "Risk Score": (
                     finding["residual_risk_score"]
                     if finding["residual_risk_score"] is not None
                     else finding["risk_score"]
                 ),
+
                 "Owner": finding["owner"] or "",
+
                 "Due Date": finding["due_date"] or "",
+
                 "Status": finding["status"]
+
             })
 
         st.dataframe(
@@ -199,13 +270,11 @@ if page == "Dashboard":
             "No findings have been recorded yet."
         )
 
-    # REMEDIATION SUMMARY
-
     st.divider()
 
-    st.subheader("Remediation Overview")
+    # REMEDIATION OVERVIEW
 
-    remediation_actions = get_all_remediation_actions()
+    st.subheader("Remediation Overview")
 
     total_actions = len(remediation_actions)
 
@@ -219,10 +288,24 @@ if page == "Dashboard":
         if action["status"] == "Closed"
     )
 
-    rem_col1, rem_col2, rem_col3 = st.columns(3)
+    overdue_actions = sum(
+        1 for action in remediation_actions
+        if is_overdue(
+            action["due_date"],
+            action["status"]
+        )
+    )
+
+    completion_percentage = (
+        (closed_actions / total_actions) * 100
+        if total_actions > 0
+        else 0
+    )
+
+    rem_col1, rem_col2, rem_col3, rem_col4 = st.columns(4)
 
     rem_col1.metric(
-        "Total Remediation Actions",
+        "Total Actions",
         total_actions
     )
 
@@ -236,7 +319,22 @@ if page == "Dashboard":
         closed_actions
     )
 
+    rem_col4.metric(
+        "Overdue Actions",
+        overdue_actions
+    )
+
+    st.write(
+        f"Remediation Completion: {completion_percentage:.0f}%"
+    )
+
+    st.progress(
+        completion_percentage / 100
+    )
+
     st.divider()
+
+    # SYSTEM STATUS
 
     st.subheader("System Status")
 
@@ -487,6 +585,8 @@ elif page == "Risk Assessment":
                     )
 
                 st.divider()
+
+                # GRC RECOMMENDATIONS
 
                 st.header("🤖 GRC Recommendations")
 
