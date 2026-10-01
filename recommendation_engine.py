@@ -16,8 +16,13 @@ RULES = [
     {
         "name": "Unpatched software or vulnerabilities",
         "keywords": [
-            "patch", "unpatched", "vulnerability", "outdated software",
-            "outdated system", "security update", "known exploit"
+             "excessive access",
+            "privileged access",
+            "access rights",
+            "permissions",
+            "user access",
+            "least privilege"
+        
         ],
         "iso": [
             {
