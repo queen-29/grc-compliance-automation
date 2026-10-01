@@ -12,17 +12,24 @@ Provides rule-based suggestions for:
 All recommendations require human review.
 """
 
+import re
+
+
 RULES = [
     {
         "name": "Unpatched software or vulnerabilities",
         "keywords": [
-             "excessive access",
-            "privileged access",
-            "access rights",
-            "permissions",
-            "user access",
-            "least privilege"
-        
+            "unpatched software",
+            "unpatched systems",
+            "security patches",
+            "missing patches",
+            "patch management",
+            "software vulnerabilities",
+            "technical vulnerabilities",
+            "vulnerability scanning",
+            "vulnerable software",
+            "outdated software",
+            "flaw remediation"
         ],
         "iso": [
             {
@@ -64,8 +71,14 @@ RULES = [
     {
         "name": "Multi-factor authentication weakness",
         "keywords": [
-            "mfa", "multi-factor", "multifactor",
-            "two-factor", "2fa", "authentication"
+            "mfa",
+            "multi-factor authentication",
+            "multifactor authentication",
+            "two-factor authentication",
+            "2fa",
+            "missing multi-factor",
+            "authentication weakness",
+            "authentication controls"
         ],
         "iso": [
             {
@@ -107,9 +120,18 @@ RULES = [
     {
         "name": "Excessive access privileges",
         "keywords": [
-            "unauthorized access", "excessive access",
-            "privileged access", "access rights",
-            "permissions", "user access", "least privilege"
+            "excessive access",
+            "excessive privileges",
+            "unauthorized access",
+            "privileged access",
+            "access rights",
+            "user permissions",
+            "excessive permissions",
+            "user access",
+            "least privilege",
+            "unnecessary access",
+            "over-privileged",
+            "overprivileged"
         ],
         "iso": [
             {
@@ -151,9 +173,14 @@ RULES = [
     {
         "name": "Backup and recovery weakness",
         "keywords": [
-            "backup", "backups", "recovery",
-            "disaster recovery", "data restoration",
-            "restore testing"
+            "backup",
+            "backups",
+            "recovery",
+            "disaster recovery",
+            "data restoration",
+            "restore testing",
+            "backup failure",
+            "backup testing"
         ],
         "iso": [
             {
@@ -195,9 +222,15 @@ RULES = [
     {
         "name": "Insufficient security logging",
         "keywords": [
-            "logging", "logs", "monitoring",
-            "audit trail", "security events",
-            "log retention", "event monitoring"
+            "insufficient logging",
+            "security logging",
+            "logging",
+            "logs",
+            "monitoring",
+            "audit trail",
+            "security events",
+            "log retention",
+            "event monitoring"
         ],
         "iso": [
             {
@@ -239,6 +272,15 @@ RULES = [
 ]
 
 
+def keyword_matches(text, keyword):
+    """
+    Match a keyword or phrase as a whole word/phrase.
+    Avoid accidental matches inside unrelated words.
+    """
+    pattern = r"(?<!\w)" + re.escape(keyword.lower()) + r"(?!\w)"
+    return re.search(pattern, text) is not None
+
+
 def get_recommendations(title, description="", category=""):
     """
     Match a finding against known risk patterns
@@ -254,7 +296,10 @@ def get_recommendations(title, description="", category=""):
     matched_rules = []
 
     for rule in RULES:
-        if any(keyword in text for keyword in rule["keywords"]):
+        if any(
+            keyword_matches(text, keyword)
+            for keyword in rule["keywords"]
+        ):
             matched_rules.append(rule)
 
     if not matched_rules:
