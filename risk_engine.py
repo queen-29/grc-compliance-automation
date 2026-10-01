@@ -1,13 +1,21 @@
-"""
-Risk scoring engine for the GRC Compliance Automation Platform.
 
-This module calculates inherent and residual risk
-using likelihood × impact.
+"""
+GRC Compliance Automation Platform
+Risk Assessment Engine
+
+Calculates inherent and residual risk using:
+Risk Score = Likelihood x Impact
+
+Initial project scoring thresholds:
+1-4   Low
+5-9   Medium
+10-16 High
+17-25 Critical
 """
 
 
 # ---------------------------------------------------------
-# Risk scales
+# RISK CONFIGURATION
 # ---------------------------------------------------------
 
 LIKELIHOOD_LEVELS = {
@@ -18,7 +26,6 @@ LIKELIHOOD_LEVELS = {
     5: "Almost Certain"
 }
 
-
 IMPACT_LEVELS = {
     1: "Insignificant",
     2: "Minor",
@@ -27,52 +34,74 @@ IMPACT_LEVELS = {
     5: "Severe"
 }
 
+RISK_THRESHOLDS = {
+    "Low": (1, 4),
+    "Medium": (5, 9),
+    "High": (10, 16),
+    "Critical": (17, 25)
+}
+
 
 # ---------------------------------------------------------
-# Severity thresholds
+# INPUT VALIDATION
+# ---------------------------------------------------------
+
+def validate_score(value, field_name):
+    """Ensure likelihood and impact are integers from 1 to 5."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be an integer.")
+
+    if value < 1 or value > 5:
+        raise ValueError(f"{field_name} must be between 1 and 5.")
+
+    return value
+
+
+# ---------------------------------------------------------
+# SEVERITY CLASSIFICATION
 # ---------------------------------------------------------
 
 def get_severity(score):
-    """
-    Convert a numerical risk score into a severity rating.
-    """
+    """Convert a risk score into a severity rating."""
 
-    if score >= 20:
-        return "Critical"
+    if isinstance(score, bool) or not isinstance(score, int):
+        raise ValueError("Risk score must be an integer.")
 
-    if score >= 12:
-        return "High"
+    if score < 1 or score > 25:
+        raise ValueError("Risk score must be between 1 and 25.")
 
-    if score >= 6:
-        return "Medium"
+    for severity, (minimum, maximum) in RISK_THRESHOLDS.items():
+        if minimum <= score <= maximum:
+            return severity
 
-    return "Low"
+    raise ValueError("Unable to classify risk score.")
 
 
 # ---------------------------------------------------------
-# Risk calculation
+# BASIC RISK CALCULATION
 # ---------------------------------------------------------
 
 def calculate_risk(likelihood, impact):
-    """
-    Calculate risk using:
+    """Calculate risk using likelihood multiplied by impact."""
 
-        Risk Score = Likelihood × Impact
-
-    Returns the score and severity.
-    """
+    validate_score(likelihood, "Likelihood")
+    validate_score(impact, "Impact")
 
     score = likelihood * impact
-    severity = get_severity(score)
 
     return {
+        "likelihood": likelihood,
+        "likelihood_label": LIKELIHOOD_LEVELS[likelihood],
+        "impact": impact,
+        "impact_label": IMPACT_LEVELS[impact],
         "score": score,
-        "severity": severity
+        "severity": get_severity(score)
     }
 
 
 # ---------------------------------------------------------
-# Inherent risk
+# INHERENT RISK
 # ---------------------------------------------------------
 
 def calculate_inherent_risk(likelihood, impact):
@@ -80,23 +109,16 @@ def calculate_inherent_risk(likelihood, impact):
     Calculate risk before considering existing controls.
     """
 
-    result = calculate_risk(
-        likelihood,
-        impact
-    )
+    result = calculate_risk(likelihood, impact)
 
     return {
-        "likelihood": likelihood,
-        "likelihood_label": LIKELIHOOD_LEVELS[likelihood],
-        "impact": impact,
-        "impact_label": IMPACT_LEVELS[impact],
-        "score": result["score"],
-        "severity": result["severity"]
+        **result,
+        "risk_type": "Inherent"
     }
 
 
 # ---------------------------------------------------------
-# Residual risk
+# RESIDUAL RISK
 # ---------------------------------------------------------
 
 def calculate_residual_risk(likelihood, impact):
@@ -104,23 +126,16 @@ def calculate_residual_risk(likelihood, impact):
     Calculate risk after considering existing controls.
     """
 
-    result = calculate_risk(
-        likelihood,
-        impact
-    )
+    result = calculate_risk(likelihood, impact)
 
     return {
-        "likelihood": likelihood,
-        "likelihood_label": LIKELIHOOD_LEVELS[likelihood],
-        "impact": impact,
-        "impact_label": IMPACT_LEVELS[impact],
-        "score": result["score"],
-        "severity": result["severity"]
+        **result,
+        "risk_type": "Residual"
     }
 
 
 # ---------------------------------------------------------
-# Risk assessment summary
+# COMPLETE RISK ASSESSMENT
 # ---------------------------------------------------------
 
 def build_risk_assessment(
@@ -130,8 +145,10 @@ def build_risk_assessment(
     residual_impact
 ):
     """
-    Build a complete risk assessment containing
-    both inherent and residual risk.
+    Calculate both inherent and residual risk.
+
+    Residual risk is assessed separately after considering
+    the effectiveness of existing controls.
     """
 
     inherent = calculate_inherent_risk(
@@ -146,5 +163,8 @@ def build_risk_assessment(
 
     return {
         "inherent": inherent,
-        "residual": residual
+        "residual": residual,
+        "risk_reduction": (
+            inherent["score"] - residual["score"]
+        )
     }
