@@ -13,6 +13,8 @@ from risk_engine import (
     calculate_residual_risk
 )
 
+from recommendation_engine import get_recommendations
+
 
 # ---------------------------------------------------------
 # PAGE CONFIGURATION
@@ -25,11 +27,6 @@ st.set_page_config(
 )
 
 initialize_database()
-
-
-# ---------------------------------------------------------
-# LOAD DATA
-# ---------------------------------------------------------
 
 findings = get_all_findings()
 
@@ -70,31 +67,32 @@ if page == "Dashboard":
 
     open_findings = sum(
         1 for finding in findings
-        if finding["status"].lower() not in ["closed", "resolved"]
+        if (finding["status"] or "").lower()
+        not in ["closed", "resolved"]
     )
 
     critical_risks = sum(
         1 for finding in findings
-        if finding["severity"].lower() == "critical"
+        if (finding["severity"] or "").lower() == "critical"
     )
 
     overdue_findings = 0
 
     for finding in findings:
 
-        due_date = finding["due_date"]
+        due_date_value = finding["due_date"]
 
-        if due_date and finding["status"].lower() not in [
-            "closed", "resolved"
-        ]:
+        if due_date_value and (
+            finding["status"] or ""
+        ).lower() not in ["closed", "resolved"]:
 
             try:
-                due = date.fromisoformat(due_date)
+                due = date.fromisoformat(str(due_date_value))
 
                 if due < date.today():
                     overdue_findings += 1
 
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
 
     col1, col2, col3, col4 = st.columns(4)
@@ -142,6 +140,15 @@ if page == "Dashboard":
             hide_index=True
         )
 
+        st.download_button(
+            label="Download Risk Register (CSV)",
+            data=__import__("pandas").DataFrame(
+                display_data
+            ).to_csv(index=False).encode("utf-8"),
+            file_name="grc_risk_register.csv",
+            mime="text/csv"
+        )
+
     else:
 
         st.info("No findings have been recorded yet.")
@@ -170,17 +177,13 @@ elif page == "Risk Assessment":
 
     st.divider()
 
-    # -----------------------------------------------------
-    # FINDING DETAILS
-    # -----------------------------------------------------
-
     st.subheader("Finding Details")
 
     with st.form("risk_assessment_form"):
 
         title = st.text_input(
             "Finding Title",
-            placeholder="Example: MFA not enabled for privileged accounts"
+            placeholder="Example: Critical patches not applied"
         )
 
         description = st.text_area(
@@ -194,6 +197,7 @@ elif page == "Risk Assessment":
             "Risk Category",
             [
                 "Access Control",
+                "Vulnerability Management",
                 "Data Protection",
                 "Network Security",
                 "Third-Party Risk",
@@ -216,9 +220,7 @@ elif page == "Risk Assessment":
 
         st.divider()
 
-        # -------------------------------------------------
         # INHERENT RISK
-        # -------------------------------------------------
 
         st.subheader("Inherent Risk")
 
@@ -235,7 +237,8 @@ elif page == "Risk Assessment":
                 options=[1, 2, 3, 4, 5],
                 index=2,
                 format_func=lambda x: (
-                    f"{x} - {['', 'Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'][x]}"
+                    f"{x} - "
+                    f"{['', 'Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'][x]}"
                 )
             )
 
@@ -246,15 +249,14 @@ elif page == "Risk Assessment":
                 options=[1, 2, 3, 4, 5],
                 index=2,
                 format_func=lambda x: (
-                    f"{x} - {['', 'Insignificant', 'Minor', 'Moderate', 'Major', 'Severe'][x]}"
+                    f"{x} - "
+                    f"{['', 'Insignificant', 'Minor', 'Moderate', 'Major', 'Severe'][x]}"
                 )
             )
 
         st.divider()
 
-        # -------------------------------------------------
         # RESIDUAL RISK
-        # -------------------------------------------------
 
         st.subheader("Residual Risk")
 
@@ -271,7 +273,8 @@ elif page == "Risk Assessment":
                 options=[1, 2, 3, 4, 5],
                 index=1,
                 format_func=lambda x: (
-                    f"{x} - {['', 'Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'][x]}"
+                    f"{x} - "
+                    f"{['', 'Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'][x]}"
                 )
             )
 
@@ -282,7 +285,8 @@ elif page == "Risk Assessment":
                 options=[1, 2, 3, 4, 5],
                 index=2,
                 format_func=lambda x: (
-                    f"{x} - {['', 'Insignificant', 'Minor', 'Moderate', 'Major', 'Severe'][x]}"
+                    f"{x} - "
+                    f"{['', 'Insignificant', 'Minor', 'Moderate', 'Major', 'Severe'][x]}"
                 )
             )
 
@@ -324,7 +328,9 @@ elif page == "Risk Assessment":
 
                 finding_id = f"F-{next_number:04d}"
 
-                timestamp = datetime.now().isoformat(timespec="seconds")
+                timestamp = datetime.now().isoformat(
+                    timespec="seconds"
+                )
 
                 add_finding(
                     finding_id=finding_id,
@@ -356,6 +362,8 @@ elif page == "Risk Assessment":
                     f"Finding {finding_id} saved successfully."
                 )
 
+                # RISK RESULTS
+
                 st.subheader("Risk Assessment Results")
 
                 result_col1, result_col2 = st.columns(2)
@@ -386,11 +394,129 @@ elif page == "Risk Assessment":
                         f'Severity: {residual["severity"]}'
                     )
 
+                st.divider()
+
+                # -------------------------------------------------
+                # AUTOMATED GRC RECOMMENDATIONS
+                # -------------------------------------------------
+
+                st.header("🤖 GRC Recommendations")
+
+                st.caption(
+                    "Rule-based recommendations generated from "
+                    "the finding description."
+                )
+
+                recommendations = get_recommendations(
+                    title=title,
+                    description=description,
+                    category=category
+                )
+
                 st.info(
-                    "The finding has been stored. "
-                    "Return to the Dashboard to view it."
+                    "Human review required: These are suggested "
+                    "control alignments, remediation actions and "
+                    "evidence items. They are not automatically "
+                    "approved compliance conclusions."
+                )
+
+                st.subheader("Finding Classification")
+
+                st.write(
+                    recommendations["finding_type"]
+                )
+
+                if recommendations["matched"]:
+
+                    st.success(
+                        "Relevant finding patterns were identified."
+                    )
+
+                else:
+
+                    st.warning(
+                        "No specific pattern was identified. "
+                        "General recommendations are displayed."
+                    )
+
+                # ISO CONTROLS
+
+                st.subheader("ISO 27001:2022 Control Suggestions")
+
+                if recommendations["iso_controls"]:
+
+                    for control in recommendations["iso_controls"]:
+
+                        with st.expander(
+                            f'{control["control"]} - {control["name"]}'
+                        ):
+
+                            st.write(control["reason"])
+
+                else:
+
+                    st.write(
+                        "No specific ISO control suggestion available."
+                    )
+
+                # NIST CONTROLS
+
+                st.subheader("NIST SP 800-53 Control Suggestions")
+
+                if recommendations["nist_controls"]:
+
+                    for control in recommendations["nist_controls"]:
+
+                        st.markdown(
+                            f'- **{control["control"]}** — '
+                            f'{control["name"]}'
+                        )
+
+                else:
+
+                    st.write(
+                        "No specific NIST control suggestion available."
+                    )
+
+                # REMEDIATION
+
+                st.subheader("Recommended Remediation Actions")
+
+                for action in recommendations["remediation"]:
+
+                    st.markdown(f"- {action}")
+
+                # EVIDENCE
+
+                st.subheader("Suggested Audit Evidence")
+
+                for evidence_item in recommendations["evidence"]:
+
+                    st.markdown(f"- {evidence_item}")
+
+                st.divider()
+
+                st.info(
+                    "Finding saved successfully. The recommendations "
+                    "are displayed for review; they are not stored as "
+                    "approved controls or verified evidence."
+                )
+
+                st.caption(
+                    "Before relying on a suggested mapping, verify "
+                    "the control reference and applicability against "
+                    "your licensed framework documentation and "
+                    "organizational scope."
                 )
 
             except ValueError as error:
 
-                st.error(f"Risk assessment error: {error}")
+                st.error(
+                    f"Risk assessment error: {error}"
+                )
+
+            except Exception as error:
+
+                st.error(
+                    f"An unexpected error occurred: {error}"
+                )
