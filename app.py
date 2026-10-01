@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
@@ -944,4 +943,3 @@ elif page == "Remediation Tracker":
             st.info(
                 "Save your first remediation action to populate this register."
             )
-```
